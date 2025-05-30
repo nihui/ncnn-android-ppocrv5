@@ -38,6 +38,7 @@ https://github.com/nihui/opencv-mobile
 
 ## screenshot
 ![](screenshot0.jpg)
+![](screenshot1.jpg)
 
 ## guidelines for converting PPOCRv5 models
 
