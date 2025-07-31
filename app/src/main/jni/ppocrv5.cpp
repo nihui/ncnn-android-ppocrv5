@@ -371,6 +371,8 @@ int PPOCRv5::recognize(const cv::Mat& rgb, Object& object)
     ex.extract("out0", out);
 
     // 18385 x len
+    int last_token = 0;
+
     for (int i = 0; i < out.h; i++)
     {
         const float* p = out.row(i);
@@ -386,6 +388,11 @@ int PPOCRv5::recognize(const cv::Mat& rgb, Object& object)
                 index = j;
             }
         }
+
+        if (last_token == index) //CTC规则，相邻index相同视为同一个字
+                continue;
+
+        last_token = index;
 
         if (index <= 0)
             continue;
