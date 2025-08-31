@@ -476,7 +476,10 @@ int PPOCRv5::draw(cv::Mat& rgb, const std::vector<Object>& objects)
         {
             const Character& ch = objects[i].text[j];
             if (ch.id >= character_dict_size)
+            {
+                text +=" ";
                 continue;
+            }
 
             if (obj.orientation == 0)
             {
