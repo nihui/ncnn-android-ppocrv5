@@ -46,6 +46,7 @@ https://github.com/nihui/opencv-mobile
 ```shell
 pip install paddlepaddle==3.0.0
 pip install paddleocr==3.0.0
+pip install paddlepaddle==3.0.0
 paddlex --install paddle2onnx
 ```
 
