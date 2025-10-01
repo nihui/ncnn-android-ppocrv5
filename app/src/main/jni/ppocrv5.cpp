@@ -389,7 +389,7 @@ int PPOCRv5::recognize(const cv::Mat& rgb, Object& object)
             }
         }
 
-        if (last_token == index) //CTC规则，相邻index相同视为同一个字
+        if (last_token == index) // CTC rule, if index is same as last one, they will be merged into one token
                 continue;
 
         last_token = index;
