@@ -1,4 +1,67 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    ext {
+        //Ref : https://developer.android.com/build/releases/past-releases
+        agp_gradle = libs.versions.agp.get()
+        kotlin_version = "1.9.25"
+        println "Show  kotlin_version  : ${kotlin_version}"
+        kotlin_version = libs.versions.kotlin.get()
+        println "Show  kotlin_version from lib.version.toml  : ${kotlin_version}"
+        coroutine_version = "1.6.4"
+        jb_compose_version = libs.versions.jetbrains.compose.multiplatform.get()
+
+        navigation_version = libs.versions.androidx.navigation.get()
+    }
+
+    println "Show  fianl kotlin_version  : ${kotlin_version}"
+
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        google()
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+        maven {
+            url = uri('https://maven.pkg.jetbrains.space/public/p/compose/dev')
+        }
+    }
+    dependencies {
+//        classpath "com.android.tools.build:gradle:$agp_gradle"
+//        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+//        classpath "org.jetbrains.kotlin:kotlin-serialization:$kotlin_version"
+        classpath "com.squareup.okhttp3:okhttp:4.12.0"
+        classpath "org.json:json:20251224"
+    }
+}
+
 plugins {
-id 'com.android.application' version '8.7.3' apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.android.kotlin.multiplatform.library) apply false
+
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+
+    alias(libs.plugins.jetbrains.compose) apply false
+    alias(libs.plugins.compose.compiler) apply false
+
+    alias(libs.plugins.kotlin.serialization) apply false
+
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.de.ktorfit) apply false
+
+    alias(libs.plugins.room) apply false
+
+    alias(libs.plugins.android.lint) apply false
+}
+
+allprojects {
+    afterEvaluate {
+    }
+}
+
+subprojects {
+    afterEvaluate {
+    }
 }

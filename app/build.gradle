@@ -1,5 +1,18 @@
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+
 plugins {
-    id 'com.android.application'
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+}
+
+ext {
+    jniDir = file("src/main/jni")
+    ncnnTargetDirName = "ncnn-android-vulkan"
+    ncnnDir = file("${jniDir}/${ncnnTargetDirName}")
+    opencvTargetDirName = "opencv-mobile-android"
+    opencvDir = file("${jniDir}/${opencvTargetDirName}")
 }
 
 android {
@@ -14,7 +27,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                 arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+                        "-Dncnn_DIR_FROM_GRADLE=${project.ext.ncnnDir.absolutePath}",
+                        "-DOpenCV_DIR_FROM_GRADLE=${project.ext.opencvDir.absolutePath}/sdk/native/jni"
             }
         }
     }
@@ -26,8 +41,13 @@ android {
         }
     }
 
-    dependencies {
-        implementation 'com.android.support:support-v4:24.0.0'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
     }
 
     packaging {
@@ -35,4 +55,138 @@ android {
             useLegacyPackaging true
         }
     }
+}
+
+tasks.register('setupNcnn') {
+    group = "NCNN Setup"
+    description = "Downloads NCNN. Uses a defined version tag in the task, otherwise fetches the latest."
+    outputs.dir(project.ext.ncnnDir)
+
+    doLast {
+        println "==============================================="
+        def ncnnVersionTag = "20250503"
+
+        def ncnnApiBaseUrl = "https://api.github.com/repos/Tencent/ncnn/releases"
+        def ncnnApiUrl
+
+        if (ncnnVersionTag?.trim()) {
+            println "Executing 'setupNcnn' task for specific version tag: ${ncnnVersionTag}"
+            ncnnApiUrl = "${ncnnApiBaseUrl}/tags/${ncnnVersionTag}"
+        } else {
+            println "Executing 'setupNcnn' task for the latest version."
+            ncnnApiUrl = "${ncnnApiBaseUrl}/latest"
+        }
+
+        def client = new OkHttpClient()
+        def request = new Request.Builder().url(ncnnApiUrl).build()
+        def downloadUrl = ""
+        def zipRootFolderName = ""
+
+        try {
+            client.newCall(request).execute().withCloseable { response ->
+                if (!response.isSuccessful()) {
+                    throw new IOException("Failed to query GitHub API at ${ncnnApiUrl}: ${response}")
+                }
+                def releaseInfo = new JSONObject(response.body().string())
+                def assets = releaseInfo.getJSONArray("assets")
+
+                for (int i = 0; i < assets.length(); i++) {
+                    def asset = assets.getJSONObject(i)
+                    String name = asset.getString("name")
+                    // 通用匹配，尋找包含 -android-vulkan.zip 的檔案
+                    if (name.contains("-android-vulkan.zip")) {
+                        downloadUrl = asset.getString("browser_download_url")
+                        zipRootFolderName = name.replace(".zip", "")
+                        println "Found NCNN release asset: ${name}"
+                        println "Download URL: ${downloadUrl}"
+                        break
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new GradleException("Failed to get NCNN download URL. Error: ${e.message}")
+        }
+
+        if (downloadUrl.isEmpty()) {
+            throw new GradleException("Could not find a '...-android-vulkan.zip' asset in the release.")
+        }
+        def outputZip = file("${buildDir}/downloads/ncnn.zip")
+        outputZip.parentFile.mkdirs()
+        new URL(downloadUrl).withInputStream { i -> outputZip.withOutputStream { o -> o << i } }
+        println "Download complete: ${outputZip}"
+
+        project.copy {
+            from(zipTree(outputZip))
+            into(project.ext.ncnnDir)
+            eachFile { file ->
+                file.path = file.path.replaceFirst("^${zipRootFolderName}/", "")
+            }
+            includeEmptyDirs = false
+        }
+
+        println "NCNN extracted successfully to ${project.ext.ncnnDir}"
+        println "==============================================="
+    }
+}
+
+tasks.register('setupOpenCV') {
+    group = "OpenCV Setup"
+    description = "Downloads and extracts the latest OpenCV for Android."
+    outputs.dir(project.ext.opencvDir)
+
+    doLast {
+        println "==============================================="
+        println "Executing 'setupOpenCV' task..."
+        def opencvApiUrl = "https://api.github.com/repos/nihui/opencv-mobile/releases/latest"
+        def client = new OkHttpClient()
+        def request = new Request.Builder().url(opencvApiUrl).build()
+        def downloadUrl = ""
+        def zipRootFolderName = ""
+
+        try {
+            client.newCall(request).execute().withCloseable { response ->
+                if (!response.isSuccessful()) throw new IOException("Failed to query GitHub API for OpenCV: ${response}")
+                def releaseInfo = new JSONObject(response.body().string())
+                def assets = releaseInfo.getJSONArray("assets")
+                for (int i = 0; i < assets.length(); i++) {
+                    def asset = assets.getJSONObject(i)
+                    String name = asset.getString("name")
+                    if (name.contains("-android.zip")) {
+                        downloadUrl = asset.getString("browser_download_url")
+                        zipRootFolderName = name.replace(".zip", "")
+                        break
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new GradleException("Failed to get OpenCV download URL. Error: ${e.message}")
+        }
+
+        if (downloadUrl.isEmpty()) throw new GradleException("Could not find 'opencv-mobile-XYZ-android.zip' asset.")
+
+        def outputZip = file("${buildDir}/downloads/opencv.zip")
+        outputZip.parentFile.mkdirs()
+        new URL(downloadUrl).withInputStream { i -> outputZip.withOutputStream { o -> o << i } }
+        println "OpenCV Download complete: ${outputZip}"
+        project.copy {
+            from(zipTree(outputZip))
+            into(project.ext.opencvDir)
+            eachFile { file ->
+                file.path = file.path.replaceFirst("^${zipRootFolderName}/", "")
+            }
+            includeEmptyDirs = false
+        }
+
+        println "OpenCV extracted successfully to ${project.ext.opencvDir}"
+        println "==============================================="
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("setupNcnn")
+    dependsOn("setupOpenCV")
+}
+
+dependencies {
+    implementation 'com.android.support:support-v4:+'
 }
