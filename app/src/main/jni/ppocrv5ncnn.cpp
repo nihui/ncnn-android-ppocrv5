@@ -21,6 +21,7 @@
 #include <jni.h>
 
 #include <string>
+#include <string.h>
 #include <vector>
 
 #include <platform.h>
@@ -182,7 +183,7 @@ JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 // public native boolean loadModel(AssetManager mgr, int modelid, int sizeid, int cpugpu);
 JNIEXPORT jboolean JNICALL Java_com_tencent_ppocrv5ncnn_PPOCRv5Ncnn_loadModel(JNIEnv* env, jobject thiz, jobject assetManager, jint modelid, jint sizeid, jint cpugpu)
 {
-    if (modelid < 0 || modelid > 1 || sizeid < 0 || sizeid > 4 || cpugpu < 0 || cpugpu > 2)
+    if (modelid < 0 || modelid > 1 || sizeid < 0 || sizeid > 4 || cpugpu < 0 || cpugpu > 3)
     {
         return JNI_FALSE;
     }
@@ -213,6 +214,7 @@ JNIEXPORT jboolean JNICALL Java_com_tencent_ppocrv5ncnn_PPOCRv5Ncnn_loadModel(JN
     bool use_fp16 = (int)modelid == 0; // fp16 for server model cause nan result
     bool use_gpu = (int)cpugpu == 1;
     bool use_turnip = (int)cpugpu == 2;
+    bool use_momoten = (int)cpugpu == 3;
 
     // reload
     {
@@ -220,7 +222,7 @@ JNIEXPORT jboolean JNICALL Java_com_tencent_ppocrv5ncnn_PPOCRv5Ncnn_loadModel(JN
 
         {
             static int old_modelid = 0;
-            static int old_cpugpu = 0;
+            static int old_cpugpu = -1;
             if (modelid != old_modelid || cpugpu != old_cpugpu)
             {
                 // model or cpugpu changed
@@ -228,24 +230,58 @@ JNIEXPORT jboolean JNICALL Java_com_tencent_ppocrv5ncnn_PPOCRv5Ncnn_loadModel(JN
                 g_ppocrv5 = 0;
             }
             old_modelid = modelid;
-            old_cpugpu = cpugpu;
 
-            ncnn::destroy_gpu_instance();
+            if (cpugpu != old_cpugpu)
+            {
+                // The old Net must be destroyed before switching drivers.
+                ncnn::destroy_gpu_instance();
+                old_cpugpu = -1;
 
-            if (use_turnip)
-            {
-                ncnn::create_gpu_instance("libvulkan_freedreno.so");
-            }
-            else if (use_gpu)
-            {
-                ncnn::create_gpu_instance();
+                if (use_momoten)
+                {
+                    if (ncnn::create_gpu_instance("libmomoten.so") != 0)
+                    {
+                        ncnn::destroy_gpu_instance();
+                        return JNI_FALSE;
+                    }
+
+                    ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device();
+                    if (!vkdev || !vkdev->is_valid()
+                        || (strcmp(vkdev->info.driver_name(), "momoten") != 0 && strncmp(vkdev->info.device_name(), "momoten: ", 9) != 0))
+                    {
+                        // simplevk may fall back to another driver.
+                        ncnn::destroy_gpu_instance();
+                        return JNI_FALSE;
+                    }
+                }
+                else if (use_turnip)
+                {
+                    if (ncnn::create_gpu_instance("libvulkan_freedreno.so") != 0)
+                    {
+                        ncnn::destroy_gpu_instance();
+                        return JNI_FALSE;
+                    }
+
+                    ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device();
+                    if (!vkdev || !vkdev->is_valid() || strcmp(vkdev->info.driver_name(), "turnip") != 0)
+                    {
+                        // simplevk may fall back to another driver.
+                        ncnn::destroy_gpu_instance();
+                        return JNI_FALSE;
+                    }
+                }
+                else if (use_gpu)
+                {
+                    ncnn::create_gpu_instance();
+                }
+                old_cpugpu = cpugpu;
             }
 
             if (!g_ppocrv5)
             {
                 g_ppocrv5 = new PPOCRv5;
 
-                g_ppocrv5->load(mgr, det_parampath.c_str(), det_modelpath.c_str(), rec_parampath.c_str(), rec_modelpath.c_str(), use_fp16, use_gpu || use_turnip);
+                g_ppocrv5->load(mgr, det_parampath.c_str(), det_modelpath.c_str(), rec_parampath.c_str(), rec_modelpath.c_str(), use_fp16, use_gpu || use_turnip || use_momoten);
             }
             g_ppocrv5->set_target_size(sizetypes[(int)sizeid]);
         }
